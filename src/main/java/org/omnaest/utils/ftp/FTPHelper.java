@@ -23,64 +23,88 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
+import java.util.Optional;
 
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.net.ftp.FTPClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * @author omnaest
+ * @deprecated please use {@link FTPUtils#load()} instead
+ */
+@Deprecated
 public class FTPHelper
 {
-	private static Logger LOG = LoggerFactory.getLogger(FTPHelper.class);
+    private static Logger LOG = LoggerFactory.getLogger(FTPHelper.class);
 
-	public static InputStream loadFileContent(String url) throws IOException
-	{
-		URL fullUrl = new URL(url);
-		String host = fullUrl.getHost();
-		String path = fullUrl.getPath();
-		int port = fullUrl.getPort();
-		return loadFileContent(host, port, path);
-	}
+    public static Optional<InputStream> loadFileContent(String url) throws IOException
+    {
+        URL fullUrl = new URL(url);
+        String host = fullUrl.getHost();
+        String path = fullUrl.getPath();
+        int port = fullUrl.getPort();
+        return loadFileContent(host, port, path);
+    }
 
-	public static InputStream loadFileContent(String host, String path) throws IOException
-	{
-		int port = -1;
-		return loadFileContent(host, port, path);
-	}
+    public static Optional<InputStream> loadFileContent(String host, String path) throws IOException
+    {
+        int port = -1;
+        return loadFileContent(host, port, path);
+    }
 
-	public static InputStream loadFileContent(String host, int port, String path) throws IOException
-	{
-		FTPClient ftpClient = new FTPClient();
+    public static Optional<InputStream> loadFileContent(String host, int port, String path) throws IOException
+    {
+        String userName = "anonymous";
+        String password = "";
+        return loadFileContent(host, port, path, userName, password).map(data ->
+        {
+            try
+            {
+                return IOUtils.toBufferedInputStream(new ByteArrayInputStream(data));
+            }
+            catch (IOException e)
+            {
+                throw new IllegalStateException(e);
+            }
+        });
+    }
 
-		byte[] byteArray;
-		try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream())
-		{
-			//
-			boolean resultOk = true;
-			if (port >= 0)
-			{
-				ftpClient.connect(host, port);
-			}
-			else
-			{
-				ftpClient.connect(host);
-			}
+    public static Optional<byte[]> loadFileContent(String host, int port, String path, String userName, String password) throws IOException
+    {
+        FTPClient ftpClient = new FTPClient();
 
-			resultOk &= ftpClient.login("anonymous", "");
-			LOG.info(ftpClient.getReplyString());
-			resultOk &= ftpClient.retrieveFile(path, outputStream);
-			LOG.info(ftpClient.getReplyString());
-			resultOk &= ftpClient.logout();
-			LOG.info(ftpClient.getReplyString());
-			LOG.info("Success:" + resultOk);
+        byte[] byteArray;
+        try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream())
+        {
+            //
+            boolean resultOk = true;
+            if (port >= 0)
+            {
+                ftpClient.connect(host, port);
+            }
+            else
+            {
+                ftpClient.connect(host);
+            }
 
-			//
-			byteArray = outputStream.toByteArray();
-			return IOUtils.toBufferedInputStream(new ByteArrayInputStream(byteArray));
-		}
-		catch (Exception e)
-		{
-			return null;
-		}
-	}
+            resultOk &= ftpClient.login(userName, password);
+            LOG.info(ftpClient.getReplyString());
+            resultOk &= ftpClient.retrieveFile(path, outputStream);
+            LOG.info(ftpClient.getReplyString());
+            resultOk &= ftpClient.logout();
+            LOG.info(ftpClient.getReplyString());
+            LOG.info("Success:" + resultOk);
+
+            //
+            byteArray = outputStream.toByteArray();
+            return !resultOk ? Optional.empty() : Optional.ofNullable(byteArray);
+        }
+        catch (Exception e)
+        {
+            LOG.error("Unexpected error", e);
+            return Optional.empty();
+        }
+    }
 }
