@@ -1,15 +1,21 @@
 package org.omnaest.utils.ftp;
 
+import java.io.BufferedInputStream;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.net.ftp.FTP;
 import org.apache.commons.net.ftp.FTPClient;
+import org.omnaest.utils.IOUtils;
+import org.omnaest.utils.duration.DurationCapture;
+import org.omnaest.utils.duration.DurationCapture.DurationMeasurement;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -40,6 +46,8 @@ public class FTPUtils
 
         public Optional<FTPResource> from(String host, int port, String path);
 
+        FTPRequest withReceiveUsingPassiveMode(boolean receiveUsingPassiveMode);
+
     }
 
     public static interface FTPResource
@@ -58,9 +66,17 @@ public class FTPUtils
     {
         return new FTPRequest()
         {
-            private String   userName = "";
-            private String   password = "";
-            private FileType fileType = FileType.AUTO;
+            private String   userName                = "";
+            private String   password                = "";
+            private FileType fileType                = FileType.AUTO;
+            private boolean  receiveUsingPassiveMode = true;
+
+            @Override
+            public FTPRequest withReceiveUsingPassiveMode(boolean receiveUsingPassiveMode)
+            {
+                this.receiveUsingPassiveMode = receiveUsingPassiveMode;
+                return this;
+            }
 
             @Override
             public FTPRequest withUsername(String userName)
@@ -142,39 +158,69 @@ public class FTPUtils
                     }
 
                     //
+                    resultOk &= ftpClient.login(this.userName, this.password);
+                    LOG.info(ftpClient.getReplyString());
+
+                    //
                     if (FileType.AUTO.equals(this.fileType))
                     {
-                        if (StringUtils.endsWith(path, ".txt"))
+                        if (StringUtils.endsWithAny(path, ".txt", ".json", ".xml"))
                         {
-                            ftpClient.setFileType(FTP.ASCII_FILE_TYPE);
+                            resultOk &= ftpClient.setFileType(FTP.ASCII_FILE_TYPE);
                         }
                         else
                         {
-                            ftpClient.setFileType(FTP.BINARY_FILE_TYPE);
+                            resultOk &= ftpClient.setFileType(FTP.BINARY_FILE_TYPE);
                         }
                     }
                     else if (FileType.ASCII_TEXT.equals(this.fileType))
                     {
-                        ftpClient.setFileType(FTP.ASCII_FILE_TYPE);
+                        resultOk &= ftpClient.setFileType(FTP.ASCII_FILE_TYPE);
                     }
                     else if (FileType.BINARY.equals(this.fileType))
                     {
-                        ftpClient.setFileType(FTP.BINARY_FILE_TYPE);
+                        resultOk &= ftpClient.setFileType(FTP.BINARY_FILE_TYPE);
+                    }
+                    LOG.info(ftpClient.getReplyString());
+
+                    resultOk &= ftpClient.setFileTransferMode(FTP.STREAM_TRANSFER_MODE);
+                    LOG.info(ftpClient.getReplyString());
+
+                    if (this.receiveUsingPassiveMode)
+                    {
+                        ftpClient.enterLocalPassiveMode();
                     }
 
-                    //
-                    resultOk &= ftpClient.login(this.userName, this.password);
-                    LOG.info(ftpClient.getReplyString());
+                    long fileSize = this.determineFileSize(path, ftpClient);
+                    ftpClient.setBufferSize(this.determineBufferSize(fileSize));
+                    DurationMeasurement durationMeasurement = DurationCapture.newInstance()
+                                                                             .start();
+                    LOG.info("File size: " + fileSize);
+                    try (InputStream inputStream = new BufferedInputStream(ftpClient.retrieveFileStream(path), 32 * 1024 * 1024))
+                    {
+                        LOG.info(ftpClient.getReplyString());
+                        IOUtils.copyWithProgess(inputStream, outputStream, fileSize, (int) Math.round(fileSize
+                                * 0.01), progress -> LOG.info("Progress: " + Math.round(progress * 100) + "% ETA: " + durationMeasurement.stop()
+                                                                                                                                         .toETA(progress)
+                                                                                                                                         .asCanonicalString(TimeUnit.HOURS,
+                                                                                                                                                            TimeUnit.MINUTES,
+                                                                                                                                                            TimeUnit.SECONDS)
+                                        + "( " + Math.round(fileSize * progress) + " / " + fileSize + " bytes )"));
+                    }
+                    catch (Exception e)
+                    {
+                        LOG.warn("Exception fetching file content: " + path, e);
+                        resultOk = false;
+                    }
 
-                    ftpClient.enterLocalPassiveMode();
-
-                    resultOk &= ftpClient.retrieveFile(path, outputStream);
-                    LOG.info(ftpClient.getReplyString());
                     resultOk &= ftpClient.logout();
                     LOG.info(ftpClient.getReplyString());
                     LOG.info("Success:" + resultOk);
 
+                    ftpClient.disconnect();
+
                     //
+                    outputStream.flush();
                     content = !resultOk ? Optional.empty() : Optional.ofNullable(outputStream.toByteArray());
 
                     return content.map(data -> new FTPResource()
@@ -197,6 +243,21 @@ public class FTPUtils
                     LOG.error("Unexpected error", e);
                     return Optional.empty();
                 }
+            }
+
+            private int determineBufferSize(long fileSize)
+            {
+                return Math.max(1024, Math.min(256 * 1024 * 1024, (int) fileSize));
+            }
+
+            private long determineFileSize(String path, FTPClient ftpClient) throws IOException
+            {
+                return Optional.ofNullable(ftpClient.listFiles(path))
+                               .filter(files -> files.length == 1)
+                               .map(files -> files[0])
+                               .filter(file -> file.isFile())
+                               .map(file -> file.getSize())
+                               .orElse(-1l);
             }
         };
     }
