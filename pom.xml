@@ -46,12 +46,14 @@
 			<version>0.0.1-SNAPSHOT</version>
 		</dependency>
 
+		<!-- <dependency> <groupId>org.apache.servicemix.bundles</groupId> <artifactId>org.apache.servicemix.bundles.commons-net</artifactId> 
+			<version>1.4.1_6</version> </dependency> -->
+		<!-- https://mvnrepository.com/artifact/commons-net/commons-net -->
 		<dependency>
-			<groupId>org.apache.servicemix.bundles</groupId>
-			<artifactId>org.apache.servicemix.bundles.commons-net</artifactId>
-			<version>1.4.1_6</version>
+			<groupId>commons-net</groupId>
+			<artifactId>commons-net</artifactId>
+			<version>3.7.2</version>
 		</dependency>
-
 
 		<dependency>
 			<groupId>org.omnaest.utils</groupId>
