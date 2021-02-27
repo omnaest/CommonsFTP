@@ -7,6 +7,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.time.temporal.ChronoUnit;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
@@ -59,6 +61,22 @@ public class FTPUtils
         public byte[] asByteArray();
 
         public InputStream asInputStream();
+
+        /**
+         * Similar to {@link #asString()} with {@link StandardCharsets#UTF_8}
+         * 
+         * @return
+         */
+        public String asString();
+
+        /**
+         * Returns the content converted to a {@link String} using the given {@link Charset}
+         * 
+         * @see StandardCharsets
+         * @param charset
+         * @return
+         */
+        public String asString(Charset charset);
     }
 
     public static enum FileType
@@ -254,6 +272,26 @@ public class FTPUtils
                                              {
                                                  return data;
                                              }
+
+                                             @Override
+                                             public String asString()
+                                             {
+                                                 return this.asString(StandardCharsets.UTF_8);
+                                             }
+
+                                             @Override
+                                             public String asString(Charset charset)
+                                             {
+                                                 try
+                                                 {
+                                                     return org.apache.commons.io.IOUtils.toString(this.asInputStream(), charset);
+                                                 }
+                                                 catch (IOException e)
+                                                 {
+                                                     throw new IllegalStateException("Unable to convert to string", e);
+                                                 }
+                                             }
+
                                          });
                                      }
                                      catch (Exception e)
