@@ -101,8 +101,7 @@ public class FTPUtils
 
     public static FTPRequest load()
     {
-        return new FTPRequest()
-        {
+        return new FTPRequest() {
             private String   userName                = "";
             private String   password                = "";
             private FileType fileType                = FileType.AUTO;
@@ -252,11 +251,11 @@ public class FTPUtils
                                              LOG.info(ftpClient.getReplyString());
                                              IOUtils.copyWithProgess(inputStream, outputStream, fileSize, (int) Math.round(fileSize * 0.01),
                                                                      progress -> LOG.info("Progress: " + Math.round(progress * 100) + "% ETA: "
-                                                                             + durationMeasurement.stop()
-                                                                                                  .toETA(progress)
-                                                                                                  .asCanonicalString(TimeUnit.HOURS, TimeUnit.MINUTES,
-                                                                                                                     TimeUnit.SECONDS)
-                                                                             + "( " + Math.round(fileSize * progress) + " / " + fileSize + " bytes )"));
+                                                                                          + durationMeasurement.stop()
+                                                                                                               .toETA(progress)
+                                                                                                               .asCanonicalString(TimeUnit.HOURS, TimeUnit.MINUTES,
+                                                                                                                                  TimeUnit.SECONDS)
+                                                                                          + "( " + Math.round(fileSize * progress) + " / " + fileSize + " bytes )"));
                                          }
                                          catch (Exception e)
                                          {
@@ -274,8 +273,7 @@ public class FTPUtils
                                          outputStream.flush();
                                          content = !resultOk ? Optional.empty() : Optional.ofNullable(outputStream.toByteArray());
 
-                                         return content.map(data -> new FTPResource()
-                                         {
+                                         return content.map(data -> new FTPResource() {
                                              @Override
                                              public InputStream asInputStream()
                                              {
